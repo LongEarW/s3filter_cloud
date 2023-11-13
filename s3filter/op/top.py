@@ -7,6 +7,7 @@ from s3filter.op.message import TupleMessage, DataFrameMessage
 from s3filter.op.sort import SortExpression
 from s3filter.op.sql_table_scan import SQLTableScanMetrics, is_header
 from s3filter.plan.query_plan import QueryPlan
+from s3filter.plan.cost_estimator import CostEstimator
 from s3filter.op.sql_table_scan import SQLTableScan
 from s3filter.op.sql_sharded_table_scan import SQLShardedTableScan
 from s3filter.op.collate import Collate
@@ -15,6 +16,10 @@ import time
 import sys
 from collections import Iterable
 import pandas as pd
+
+import boto3
+import json
+
 
 __author__ = "Abdurrahman Ghanem <abghanem@qf.org.qa>"
 
@@ -473,3 +478,159 @@ class TopKTableScan(Operator):
                 max_val = n
 
         return min_val, max_val
+
+
+class DummyTopMetrics(OpMetrics):
+    """Extra metrics for a lambda function
+    """
+    def __init__(self):
+        super(DummyTopMetrics, self).__init__()
+        self.rows_returned = 0
+        self.query_bytes = 0
+        self.bytes_scanned = 0
+        self.bytes_processed = 0
+        self.bytes_returned = 0
+        self.num_http_get_requests = 0
+        self.cost_estimator = CostEstimator(self)
+
+    def cost(self):
+        return self.cost_estimator.estimate_cost()
+
+    def computation_cost(self, running_time=None, ec2_instance_type=None, os_type=None):
+        """
+        Estimates the computation cost of the scan operation based on EC2 pricing in the following page:
+        <https://aws.amazon.com/ec2/pricing/on-demand/>
+        :param running_time: the query running time
+        :param ec2_instance_type: the type of EC2 instance as defined by AWS
+        :param os_type: the name of the os running on the host machine (Linux, Windows ... etc)
+        :return: The estimated computation cost of the table scan operation given the query running time
+        """
+        return self.cost_estimator.estimate_computation_cost(running_time, ec2_instance_type, os_type)
+
+    def data_cost(self, ec2_region=None):
+        """
+        Estimates the cost of the scan operation based on S3 pricing in the following page:
+        <https://aws.amazon.com/s3/pricing/>
+        :return: The estimated data transfer cost of the table scan operation
+        """
+        return self.cost_estimator.estimate_data_cost(ec2_region) + self.cost_estimator.estimate_request_cost()
+
+    def data_scan_cost(self):
+        """
+        Estimate the cost of S3 data scanning
+        :return: the estimated data scanning costin USD
+        """
+        return self.cost_estimator.estimate_data_scan_cost()
+
+    def data_transfer_cost(self, ec2_region=None, s3_region=None):
+        """
+        Estimate the cost of transferring data either by s3 select or normal data transfer fees
+        :param ec2_region: the region where the computing node resides
+        :param s3_region: the region where the s3 data is stored in
+        :return: the estimated data transfer cost in USD
+        """
+        return self.cost_estimator.estimate_data_transfer_cost(ec2_region, s3_region)
+
+    def requests_cost(self):
+        """
+        Estimate the cost of the http GET requests
+        :return: the estimated http GET request cost for this particular operation
+        """
+        return self.cost_estimator.estimate_request_cost()
+
+class DummyTop(Operator):
+    """
+    The operator simply invoke TopK operator on Lambda, and receive streaming records
+    """
+    def __init__(self, path, k, sort_order, sort_field, queried_columns, table_first_part, table_parts, sample_size, 
+                    use_pandas, secure, use_native, name, query_plan, log_enabled):
+        """
+        Creates a table scan operator that emits only the k topmost tuples from the table
+        :param s3key: the table's s3 object key
+        :param use_pandas: use pandas DataFrames as the tuples engine
+        :param use_native: use native C++ cursor
+        :param max_tuples: the maximum number of tuples to return (K)
+        :param k_scale: sampling scale factor to retrieve more sampling tuples (s * K)
+        :param sort_expression: the expression on which the table tuples are sorted in order to get the top k
+        :param name: the operator name
+        :param query_plan: the query plan in which this operator is part of
+        :param log_enabled: enable logging
+        """
+        super(DummyTop, self).__init__(name, DummyTopMetrics(), query_plan, log_enabled)
+        # TODO: should include aggregated attr: cost, bytes_returned, bytes_returned, lambda cost relevent metrics
+        # traget data
+        self.path = path
+        self.k = k
+        self.table_first_part = table_first_part
+        self.table_parts = table_parts
+        self.sort_order = sort_order
+        self.sort_field = sort_field
+        self.queried_columns = queried_columns
+
+        # strategy
+        self.sample_size = sample_size
+
+        # config
+        self.query_plan = query_plan
+        self.use_pandas = use_pandas
+        self.secure = secure
+        self.use_native = use_native
+
+        # lambda 
+        self.lambda_name = "demo2"    # ?????????????????
+        self.lambda_client = boto3.client('lambda', region_name='us-east-2')
+
+        # data buffer
+        self.global_topk_df = pd.DataFrame()
+
+    def run(self):
+        """Executes the query and begins emitting tuples.
+        :return: None
+        """
+        self.op_metrics.timer_start()
+
+        if self.log_enabled:
+            print("{} | {}('{}') | Started"
+                  .format(time.time(), self.__class__.__name__, self.name))
+
+        # Invoke the Lambda function
+        payload = {
+            "path": self.path,
+            "table_first_part": self.table_first_part,
+            "table_parts": self.table_parts,
+            "k": self.k,
+            "sort_order": self.sort_order,
+            "sample_size": self.sample_size,
+            "sort_field": self.sort_field,
+            "queried_columns": self.queried_columns
+        }
+        response = self.lambda_client.invoke(
+            FunctionName=self.lambda_name,
+            InvocationType='RequestResponse',  # Use 'Event' for asynchronous invocation
+            Payload=json.dumps(payload))
+
+        # parse Lambda response (not support streaming data)
+        response_payload = json.loads(response['Payload'].read().decode('utf-8'))['body']
+        response_payload = json.loads(response_payload)
+
+        # convert record to dataframe
+        for record in response_payload['data']:
+            new_row_df = pd.DataFrame([record])
+            self.global_topk_df = pd.concat([self.global_topk_df, new_row_df], ignore_index=True)
+        # send records to consumer
+        self.send(DataFrameMessage(self.global_topk_df), self.consumers)
+
+        # TODO: parse metrics
+        print(response_payload['metrics'])
+        self.op_metrics.rows_returned += self.global_topk_df.shape[0]
+        # self.op_metrics.bytes_scanned = bytes_scanned
+        # self.op_metrics.bytes_returned = bytes_returned
+        # self.op_metrics.query_bytes = query_bytes
+        # self.op_metrics.lambda_duration = lambda_elapsed_time
+        # self.op_metrics.lambda2ec2_bytes = lambda_bytes_returned
+
+        if not self.is_completed():
+            self.complete()
+
+        self.op_metrics.timer_stop()
+        # cur.save_table()  # save to disk, maybe not necessary
