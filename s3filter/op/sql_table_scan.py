@@ -28,8 +28,8 @@ from s3filter.sql.pandas_cursor import PandasCursor
 
 # import scan
 # define lambda function name and region
-lambda_function_name = 'demo_layers'
-lambda_region_name = 'us-east-2'
+Lambda_Function_Name = 'demo_layers'
+Lambda_Region_Name = 'us-east-2'
 
 # lambda cost
 # for 512GB memory, arm: <https://aws.amazon.com/lambda/pricing/>
@@ -429,39 +429,57 @@ class SQLTableScanLambdaMetrics(OpMetrics):
         '''
         get duration from cloud watch, and calculate the actual cost
         '''
-        cloudwatch = boto3.client('cloudwatch', region_name=lambda_region_name)
+        retries = 0 
+        max_retries = 10
+        response = None
 
-         # Define start time and end time (last 15 minutes)
-        start_time = datetime.utcnow() - timedelta(minutes=15)  # 最近1小时
-        end_time = datetime.utcnow()
+        while True:
+            # Define start time and end time (last 5 minutes)
+            start_time = datetime.utcnow() - timedelta(minutes=5) 
+            end_time = datetime.utcnow()
 
-        response = cloudwatch.get_metric_statistics(
-            Namespace='AWS/Lambda',
-            MetricName='Duration',
-            Dimensions=[{'Name': 'FunctionName', 'Value': lambda_function_name}],
-            StartTime=start_time,
-            EndTime=end_time,
-            Period=300,   # Period for statistics (300 seconds - 5 minutes)
-            Statistics=['Maximum']  # Retrieve the maximum value
-        )
+            cloudwatch = boto3.client('cloudwatch', region_name= Lambda_Region_Name)
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/Lambda',
+                MetricName='Duration',
+                Dimensions=[{'Name': 'FunctionName', 'Value': Lambda_Function_Name}],
+                StartTime=start_time,
+                EndTime=end_time,
+                Period=300,   # Period for statistics (300 seconds - 5 minutes)
+                Statistics=['Maximum']  # Retrieve the maximum value
+            )
+            if len(response['Datapoints']) == 0:
+                retries += 1
+                if retries > max_retries:
+                    raise RuntimeError("Exceeded max retries")
+                
+                print("wait 30 seconds to make sure cloudWatch metrics have updated")
+                time.sleep(30)
+            else:
+                break
 
-        return response['Datapoints'] * COST_LAMBDA_DURATION_PER_SECOND
+        # sorted by timestamp
+        sorted_datapoints = sorted(response['Datapoints'], key=lambda x: x['Timestamp'])
+        # print(sorted_datapoints)
+        latest_datapoint = sorted_datapoints[-1]
+        # print(latest_datapoint)
+        return latest_datapoint['Maximum'] / 1000 * COST_LAMBDA_DURATION_PER_SECOND
     
     def lambda_invocation_cost(self):
         '''
         get invocations from cloud watch, and calculate the actual cost
         '''
-        cloudwatch = boto3.client('cloudwatch', region_name=lambda_region_name)
+        cloudwatch = boto3.client('cloudwatch', region_name=Lambda_Region_Name)
 
-        # Define start time and end time (last 15 minutes)
-        start_time = datetime.utcnow() - timedelta(minutes=15)
+        # Define start time and end time (last 5 minutes)
+        start_time = datetime.utcnow() - timedelta(minutes=5)
         end_time = datetime.utcnow()
 
         # Get 'Invocations' metric
         invocations_response = cloudwatch.get_metric_statistics(
             Namespace='AWS/Lambda',
             MetricName='Invocations',
-            Dimensions=[{'Name': 'FunctionName', 'Value': lambda_function_name}],
+            Dimensions=[{'Name': 'FunctionName', 'Value': Lambda_Function_Name}],
             StartTime=start_time,
             EndTime=end_time,
             Period=300,
@@ -542,8 +560,8 @@ class SQLTableScanLambda(Operator):
         self.filter_expr = filter_expr  # "l_orderkey == '1'" => "_0 == '1'"
 
         # lambda: Boto is not thread safe, hence one client for each operator
-        self.lambda_name = lambda_function_name    # ?????????????????
-        self.lambda_client = boto3.client('lambda', region_name=lambda_region_name)
+        self.lambda_name = Lambda_Function_Name    # ?????????????????
+        self.lambda_client = boto3.client('lambda', region_name=Lambda_Region_Name)
 
         # data buffer
         self.global_topk_df = pd.DataFrame()
