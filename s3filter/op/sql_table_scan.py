@@ -9,6 +9,8 @@ import pandas as pd
 import boto3
 from boto3 import Session
 from botocore.config import Config
+from datetime import datetime, timedelta
+from s3filter.util.constants import *
 
 from s3filter.multiprocessing.message import DataFrameMessage, StartMessage
 from s3filter.op.message import TupleMessage, StringMessage
@@ -25,7 +27,16 @@ from s3filter.sql.pandas_cursor import PandasCursor
 
 
 # import scan
+# define lambda function name and region
+lambda_function_name = 'demo_layers'
+lambda_region_name = 'us-east-2'
 
+# lambda cost
+# for 512GB memory, arm: <https://aws.amazon.com/lambda/pricing/>
+COST_LAMBDA_DURATION_PER_SECOND = 0.0000067
+COST_LAMBDA_REQUEST_PER_REQ = 0.0000002
+# EC2 in and out different AZ
+COST_LAMBDA_DATA_TRANSFER_PER_GB = 0.01
 
 class SQLTableScanMetrics(OpMetrics):
     """Extra metrics for a sql table scan
@@ -413,6 +424,61 @@ class SQLTableScanLambdaMetrics(OpMetrics):
         :return: the estimated http GET request cost for this particular operation
         """
         return self.cost_estimator.estimate_request_cost()
+    
+    def lambda_duration_cost(self):
+        '''
+        get duration from cloud watch, and calculate the actual cost
+        '''
+        cloudwatch = boto3.client('cloudwatch', region_name=lambda_region_name)
+
+         # Define start time and end time (last 15 minutes)
+        start_time = datetime.utcnow() - timedelta(minutes=15)  # 最近1小时
+        end_time = datetime.utcnow()
+
+        response = cloudwatch.get_metric_statistics(
+            Namespace='AWS/Lambda',
+            MetricName='Duration',
+            Dimensions=[{'Name': 'FunctionName', 'Value': lambda_function_name}],
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=300,   # Period for statistics (300 seconds - 5 minutes)
+            Statistics=['Maximum']  # Retrieve the maximum value
+        )
+
+        return response['Datapoints'] * COST_LAMBDA_DURATION_PER_SECOND
+    
+    def lambda_invocation_cost(self):
+        '''
+        get invocations from cloud watch, and calculate the actual cost
+        '''
+        cloudwatch = boto3.client('cloudwatch', region_name=lambda_region_name)
+
+        # Define start time and end time (last 15 minutes)
+        start_time = datetime.utcnow() - timedelta(minutes=15)
+        end_time = datetime.utcnow()
+
+        # Get 'Invocations' metric
+        invocations_response = cloudwatch.get_metric_statistics(
+            Namespace='AWS/Lambda',
+            MetricName='Invocations',
+            Dimensions=[{'Name': 'FunctionName', 'Value': lambda_function_name}],
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=300,
+            Statistics=['Sum']
+        )
+
+        invocations_sum = sum([datapoint['Sum'] for datapoint in invocations_response['Datapoints']])
+        return invocations_sum * COST_LAMBDA_REQUEST_PER_REQ
+
+    def lambda_data_transfer_cost(self):
+        '''
+        Assumption: EC2 and lambda is on the same region, region has just 3 AZs
+        Cost: if EC2 and lambda are on different AZs
+
+        But hard to position the Available Zone lambda run on, so plan to calculate the average cost(cost * 2/3)
+        '''
+        return self.bytes_returned * BYTE_TO_GB * COST_LAMBDA_DATA_TRANSFER_PER_GB * 2/3
 
     def __repr__(self):
         return {
@@ -436,7 +502,10 @@ class SQLTableScanLambdaMetrics(OpMetrics):
             'time_to_last_record_response':
                 None if self.time_to_last_record_response is None
                 else round(self.time_to_last_record_response, 5),
-            # 'cost': "${0:.8f}".format(self.cost()),
+            'cost': "${0:.8f}".format(self.cost()),
+            'lambda_duration_cost': "${0:.8f}".format(self.lambda_duration_cost()),
+            'lambda_invocation_cost': "${0:.8f}".format(self.lambda_invocation_cost()),
+            'lambda_data_transfer_cost': "${0:.8f}".format(self.lambda_data_transfer_cost()),
             # 'cost_for_instance': self.cost_estimator.ec2_instance
         }.__repr__()
 
@@ -473,8 +542,8 @@ class SQLTableScanLambda(Operator):
         self.filter_expr = filter_expr  # "l_orderkey == '1'" => "_0 == '1'"
 
         # lambda: Boto is not thread safe, hence one client for each operator
-        self.lambda_name = "demo_layers"    # ?????????????????
-        self.lambda_client = boto3.client('lambda', region_name='us-east-2')
+        self.lambda_name = lambda_function_name    # ?????????????????
+        self.lambda_client = boto3.client('lambda', region_name=lambda_region_name)
 
         # data buffer
         self.global_topk_df = pd.DataFrame()
