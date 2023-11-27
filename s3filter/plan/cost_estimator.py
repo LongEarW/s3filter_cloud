@@ -236,6 +236,11 @@ class CostEstimator:
 
         s3_data_transfer_cost = self.table_scan_metrics.bytes_returned * BYTE_TO_GB * \
                          CostEstimator.COST_S3_DATA_RETURNED_PER_GB
+        
+        print("")
+        print("data_transfer_cost:", "${0:.8f}".format(data_transfer_cost))
+        print("s3_data_transfer_cost:", "${0:.8f}".format(s3_data_transfer_cost))
+        print("")
 
         return data_transfer_cost + s3_data_transfer_cost
 
