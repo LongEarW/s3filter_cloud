@@ -15,6 +15,9 @@ from s3filter.op.message import TupleMessage, StringMessage
 from s3filter.op.operator_base import Operator, EvalMessage, EvaluatedMessage
 from s3filter.plan.op_metrics import OpMetrics
 
+from datetime import datetime
+import pytz
+
 
 class Collate(Operator):
     """This operator simply collects emitted tuples into a list. Useful for interrogating results at the end of a
@@ -43,6 +46,7 @@ class Collate(Operator):
             if self.use_shared_mem:
                 self.system.send(self.name, EvalMessage("self.local_tuples()"), self.worker)
             else:
+                print("testtest: not use_shared_mem")
                 p_message = pickle.dumps(EvalMessage("self.local_tuples()"))
                 self.queue.put(p_message)
 
@@ -97,6 +101,8 @@ class Collate(Operator):
         # TODO: Also adding to tuples for now just so the existing tests work,
         # eventually they should inspect the dataframe
 
+        print("testtest: __on_receive_dataframe, time:", datetime.now().astimezone(pytz.timezone('America/Chicago')
+))
         self.df = pd.concat([self.df, df])
         self.__tuples = [list(self.df)] + self.df.values.tolist()
 

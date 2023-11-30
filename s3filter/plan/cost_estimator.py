@@ -276,6 +276,7 @@ class CostEstimator:
         if ec2_instance_type is not None and os_type is not None:
             ec2_instance = EC2Instance.get_instance_info(os_type, ec2_instance_type, self.ec2_instance.region)
 
+        print("testtest: ec2_instance_type, ", ec2_instance_type, "ec2_price:", ec2_instance.price)
         return running_time * SEC_TO_HOUR * ec2_instance.price
 
     def estimate_cost_for_config(self, ec2_region=AWSRegion.DEFAULT, s3_region=AWSRegion.DEFAULT):
