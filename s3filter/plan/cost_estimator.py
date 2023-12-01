@@ -206,9 +206,7 @@ class CostEstimator:
         """
 
         data_transfer_cost = self.estimate_data_transfer_cost(ec2_region, s3_region)
-        print("testtest: data_transfer_cost", data_transfer_cost)
         s3_data_scan_cost = self.estimate_data_scan_cost()
-        print("testtest: s3_data_scan_cost", s3_data_scan_cost)
 
         return data_transfer_cost + s3_data_scan_cost
 
@@ -236,20 +234,16 @@ class CostEstimator:
         # In case the computation instance is not located at the same region as the s3 data region or
         # data is transferred outside aws to the internet
         if ec2_region == AWSRegion.NOT_AWS:
-            print("testtest: ec2_region is not aws")
             data_transfer_cost = self.table_scan_metrics.bytes_returned * BYTE_TO_GB * \
                                  CostEstimator.DATA_TRANSFER_PRICE_PER_GB
         # data moved within aws services but to another region
         elif s3_region != AWSRegion.ANY and s3_region != ec2_region:
-            print("testtest: ec2_region is not same as s3_region")
             data_transfer_cost = self.table_scan_metrics.bytes_returned * BYTE_TO_GB * \
                                  CostEstimator.DATA_TRANSFER_PRICE_OTHER_REGION_PER_GB
 
         s3_data_transfer_cost = self.table_scan_metrics.bytes_returned * BYTE_TO_GB * \
                          CostEstimator.COST_S3_DATA_RETURNED_PER_GB
 
-        print("testtest: data_transfer_cost", data_transfer_cost)
-        print("testtest: s3_data_transfer_cost", s3_data_transfer_cost)
         return data_transfer_cost + s3_data_transfer_cost
 
     def estimate_request_cost(self):
@@ -271,6 +265,10 @@ class CostEstimator:
         if ec2_instance_type is not None and os_type is not None:
             ec2_instance = EC2Instance.get_instance_info(os_type, ec2_instance_type, self.ec2_instance.region)
 
+        print("testtest - computation_cost")
+        print(ec2_instance_type)
+        print(ec2_instance.price)
+        print(running_time)
         return running_time * SEC_TO_HOUR * ec2_instance.price
 
     def estimate_cost_for_config(self, ec2_region=AWSRegion.DEFAULT, s3_region=AWSRegion.DEFAULT):

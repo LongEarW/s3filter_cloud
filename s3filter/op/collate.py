@@ -15,6 +15,10 @@ from s3filter.op.message import TupleMessage, StringMessage
 from s3filter.op.operator_base import Operator, EvalMessage, EvaluatedMessage
 from s3filter.plan.op_metrics import OpMetrics
 
+import datetime 
+import pytz
+import random
+
 
 class Collate(Operator):
     """This operator simply collects emitted tuples into a list. Useful for interrogating results at the end of a
@@ -33,11 +37,19 @@ class Collate(Operator):
 
         self.df = DataFrame()
 
+        self.counter = 0
+
+        self.total_time_on_receive = 0
+        
+
     def tuples(self):
         """Accessor for the collated tuples
 
         :return: The collated tuples
         """
+
+        print("testtest: invoke tuples")
+        print(datetime.datetime.now(pytz.timezone('America/Chicago')))
 
         if self.async_:
             if self.use_shared_mem:
@@ -48,6 +60,9 @@ class Collate(Operator):
 
             item = self.query_plan.listen(EvaluatedMessage)
             tuples = item.val
+
+            print("testtest: got tuples")
+            print(datetime.datetime.now(pytz.timezone('America/Chicago')))
             return tuples
         else:
             return self.__tuples
@@ -70,6 +85,9 @@ class Collate(Operator):
         """
 
         # print("Collate | {}".format(t))
+        # print("testtest: collate on receive")
+        # print(datetime.datetime.now(pytz.timezone('America/Chicago')))
+
         # for m in ms:
         if self.use_shared_mem:
             self.on_receive_message(ms)
@@ -97,8 +115,25 @@ class Collate(Operator):
         # TODO: Also adding to tuples for now just so the existing tests work,
         # eventually they should inspect the dataframe
 
+        start_time = datetime.datetime.now()
+
         self.df = pd.concat([self.df, df])
         self.__tuples = [list(self.df)] + self.df.values.tolist()
+
+        time_diff = datetime.datetime.now() - start_time
+        
+        # randomly print time_diff
+        if self.counter % 100 == 0:
+            print("testtest: __on_receive_dataframe timediff")
+            print(time_diff.total_seconds())
+        self.counter = self.counter + 1
+
+        print("testtest: __on_receive_dataframe total timediff")
+        self.total_time_on_receive = self.total_time_on_receive + time_diff.total_seconds()
+        print(self.total_time_on_receive)
+        print("testtest: __on_receive_dataframe total counts")
+        print(self.counter)
+
 
         #self.__tuples.extend(df.values.tolist())
         #self.df = self.df.append(df)
@@ -122,7 +157,9 @@ class Collate(Operator):
 
         print('')
 
-        self.write_to(sys.stdout, tuples)
+        # self.write_to(sys.stdout, tuples)
+        with open("/home/ubuntu/s3filter_cloud/output.csv", 'w') as file:
+            file.write('\n'.join(map(str, tuples)))
 
     def write_to(self, out_stream, tuples=None):
 

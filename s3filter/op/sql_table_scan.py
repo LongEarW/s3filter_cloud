@@ -9,6 +9,8 @@ import pandas as pd
 import boto3
 from boto3 import Session
 from botocore.config import Config
+import datetime
+import pytz
 
 from s3filter.multiprocessing.message import DataFrameMessage, StartMessage
 from s3filter.op.message import TupleMessage, StringMessage
@@ -112,13 +114,13 @@ class SQLTableScanMetrics(OpMetrics):
                 round(float(self.bytes_returned) / self.elapsed_time(), 5),
                 round(float(self.bytes_returned) / self.elapsed_time() / 1000000, 5),
                 round(float(self.bytes_returned) / self.elapsed_time() / 1000000000, 5)),
-            'time_to_first_response': round(self.time_to_first_response, 5),
+            'time_to_first_response': self.time_to_first_response,
             'time_to_first_record_response':
                 None if self.time_to_first_record_response is None
                 else round(self.time_to_first_record_response, 5),
             'time_to_last_record_response':
                 None if self.time_to_last_record_response is None
-                else round(self.time_to_last_record_response, 5),
+                else self.time_to_last_record_response,
             # 'cost': "${0:.8f}".format(self.cost()),
             # 'cost_for_instance': self.cost_estimator.ec2_instance
         }.__repr__()
@@ -202,6 +204,8 @@ class SQLTableScan(Operator):
         if not self.is_completed():
             self.complete()
 
+        # print("testtest: SQLTableScan completed")
+        # print(datetime.datetime.now(pytz.timezone('America/Chicago')))
         self.op_metrics.timer_stop()
         # cur.save_table()
 
@@ -265,7 +269,7 @@ class SQLTableScan(Operator):
                         print("{}('{}') | Sending field names: {}"
                               .format(op.__class__.__name__, op.name, df.columns.values))
 
-                op.op_metrics.time_to_first_response = op.op_metrics.elapsed_time()
+                op.op_metrics.time_to_first_response = datetime.datetime.now(pytz.timezone('America/Chicago')).strftime('%Y-%m-%d %H:%M:%S')
                 op.op_metrics.rows_returned += len(df)
 
                 if op.log_enabled:
@@ -291,7 +295,7 @@ class SQLTableScan(Operator):
 
             dfs = cur.execute()
             op.op_metrics.query_bytes = cur.query_bytes
-            op.op_metrics.time_to_first_response = op.op_metrics.elapsed_time()
+            op.op_metrics.time_to_first_response = datetime.datetime.now(pytz.timezone('America/Chicago')).strftime('%Y-%m-%d %H:%M:%S')
             first_tuple = True
 
             counter = 0

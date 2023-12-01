@@ -16,6 +16,9 @@ from s3filter.util.constants import *
 from s3filter.util.filesystem_util import *
 from s3filter.util.timer import Timer
 
+import pytz
+from datetime import datetime
+
 
 class PandasCursor(object):
     """Represents a database cursor for managing the context of a fetch operation.
@@ -179,7 +182,7 @@ class PandasCursor(object):
                 if self.time_to_first_record_response is None:
                     self.time_to_first_record_response = elapsed_time
 
-                self.time_to_last_record_response = elapsed_time
+                self.time_to_last_record_response = (datetime.now(pytz.timezone('America/Chicago')) + datetime.timedelta(seconds=elapsed_time)).strftime('%Y-%m-%d %H:%M:%S')
 
                 records_str = event['Records']['Payload'].decode('utf-8')
                 # records_str = event['Records']['Payload']

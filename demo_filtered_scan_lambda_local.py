@@ -35,7 +35,7 @@ def main(filter_expr):
     select_fields = "_0|_5"  # [l_orderkey, l_extendedprice]
     start_part = 1
     table_parts = 10
-    chunk_size = 10000
+    chunk_size = 1000000
     run(parallel=True, 
         start_part=start_part, table_parts=table_parts, path=path, 
         select_fields=select_fields, filter_expr=filter_expr, chunk_size=chunk_size)
@@ -91,7 +91,7 @@ def run(parallel, start_part, table_parts, path, select_fields, filter_expr, chu
     lambda_start_time = datetime.utcnow() - timedelta(seconds=query_plan.total_elapsed_time + 2)
 
     tuples = collate.tuples()
-    # collate.print_tuples(tuples)
+    collate.print_tuples(tuples)
 
     # Write the metrics
     query_plan.print_metrics()
