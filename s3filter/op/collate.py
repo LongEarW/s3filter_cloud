@@ -34,6 +34,8 @@ class Collate(Operator):
         # self.df = DataFrame()
         self.df = []
 
+        self.counter = 0
+
     def tuples(self):
         """Accessor for the collated tuples
 
@@ -60,6 +62,12 @@ class Collate(Operator):
         """
         df = pd.concat(self.df)
         self.__tuples = [list(df)] + df.values.tolist()
+
+         # randomly print time_diff
+        self.counter = self.counter + 1
+        print("testtest: local_tuples total counts")
+        print(self.counter)
+
         return self.__tuples
 
     def on_receive(self, ms, _producer):
