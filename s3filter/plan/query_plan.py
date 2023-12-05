@@ -288,8 +288,14 @@ class QueryPlan(object):
         print("total_returned_bytes: {} MB".format(bytes_returned * BYTE_TO_MB))
         print("total_http_get_requests: {}".format(http_requests))
         print("total_returned_rows: {}".format(rows))
-        print("computation_cost: ${0:.10f}".format(computation_cost))
-        print("data_cost: ${0:.10f}".format(data_cost))
+        print("computation_cost: ${0:.8f}".format(computation_cost))
+        print("data_cost: ${0:.8f}".format(data_cost))
+        print("request_cost: ${0:.8f}".format(http_requests * 0.0004 / 1000.0))
+        s3_data_scan_cost = bytes_scanned * BYTE_TO_GB * 0.002
+        s3_return_cost = bytes_returned * BYTE_TO_GB * 0.0007
+        print("s3_data_scan_cost: ${0:.8f}".format(s3_data_scan_cost))
+        print("s3_return_cost: ${0:.8f}".format(s3_return_cost))
+        print("s3_select_cost: ${0:.8f}".format(s3_data_scan_cost + s3_return_cost))
         print("total_cost: ${0:.08f}".format(cost))
 
     def assert_operator_time_equals_plan_time(self):
