@@ -25,7 +25,7 @@ Lambda_Region_Name = 'us-east-2'
 
 # lambda cost
 # for 512GB memory, arm: <https://aws.amazon.com/lambda/pricing/>
-COST_LAMBDA_DURATION_PER_SECOND = 0.0000000500
+COST_LAMBDA_DURATION_PER_SECOND = 0.00005
 COST_LAMBDA_REQUEST_PER_REQ = 0.0000002
 # EC2 in and out different AZ
 COST_LAMBDA_DATA_TRANSFER_PER_GB = 0.01
@@ -35,7 +35,7 @@ def main(filter_expr):
     select_fields = "_0|_5"  # [l_orderkey, l_extendedprice]
     start_part = 1
     table_parts = 10
-    chunk_size = 10000
+    chunk_size = 1024 * 1024 * 16
     run(parallel=True, 
         start_part=start_part, table_parts=table_parts, path=path, 
         select_fields=select_fields, filter_expr=filter_expr, chunk_size=chunk_size)
