@@ -25,7 +25,7 @@ Lambda_Region_Name = 'us-east-2'
 
 # lambda cost
 # for 512GB memory, arm: <https://aws.amazon.com/lambda/pricing/>
-COST_LAMBDA_DURATION_PER_SECOND = 0.00005
+COST_LAMBDA_DURATION_PER_SECOND = 0.000025
 COST_LAMBDA_REQUEST_PER_REQ = 0.0000002
 # EC2 in and out different AZ
 COST_LAMBDA_DATA_TRANSFER_PER_GB = 0.01
