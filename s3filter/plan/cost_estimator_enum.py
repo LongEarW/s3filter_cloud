@@ -59,6 +59,7 @@ class EC2InstanceType:
     c4large = 'c4.large'
     c4xlarge = 'c4.xlarge'
     c518xlarge = 'c5.18xlarge'
+    ca8xlarge = 'c5a.8xlarge'
     c52xlarge = 'c5.2xlarge'
     c54xlarge = 'c5.4xlarge'
     c59xlarge = 'c5.9xlarge'
