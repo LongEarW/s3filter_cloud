@@ -18,8 +18,7 @@ import pandas as pd
 import numpy as np
 
 def main(filter_value):
-    run(True, True, 0, 1, 10, 'access_method_benchmark/shards-1GB', Format.CSV, 1024 * 1024 * 16, filter_value)
-
+    run(True, True, 0, 1, 100, 'access_method_benchmark/TPCH-10GB', Format.CSV, 10000, filter_value)
 
 def run(parallel, use_pandas, buffer_size, start_part, table_parts, path, format_, chunksize, filter_value):
     """
