@@ -14751,6 +14751,7 @@
         "c5.4xlarge",
         "c5.9xlarge",
         "c5.18xlarge",
+        "c5a.8xlarge",
         "c5d.large",
         "c5d.xlarge",
         "c5d.2xlarge",
