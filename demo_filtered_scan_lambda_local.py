@@ -31,11 +31,16 @@ COST_LAMBDA_REQUEST_PER_REQ = 0.0000002
 COST_LAMBDA_DATA_TRANSFER_PER_GB = 0.01
 
 def main(filter_expr):
-    path = 'access_method_benchmark/shards-1GB'
+    path = 'access_method_benchmark/TPCH-10GB'
     select_fields = "_0|_5"  # [l_orderkey, l_extendedprice]
     start_part = 1
+<<<<<<< HEAD
     table_parts = 10
     chunk_size = 1024 * 1024 * 16
+=======
+    table_parts = 100
+    chunk_size = 10000
+>>>>>>> test-10G
     run(parallel=True, 
         start_part=start_part, table_parts=table_parts, path=path, 
         select_fields=select_fields, filter_expr=filter_expr, chunk_size=chunk_size)
