@@ -15,7 +15,7 @@ import sys
 
 
 def main(price_value):
-    run(True, True, 0, 10, 'access_method_benchmark/shards-1GB', Format.CSV, price_value)
+    run(True, True, 0, 100, 'access_method_benchmark/TPCH-10GB', Format.CSV, price_value)
 
 
 def run(parallel, use_pandas, buffer_size, table_parts, path, format_, price_value):
