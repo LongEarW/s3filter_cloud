@@ -31,6 +31,7 @@ Linux/UNIX,Compute Optimized,c5.4xlarge,16,68,32 GiB,EBS Only,0.68
 Linux/UNIX,Compute Optimized,c5.9xlarge,36,141,72 GiB,EBS Only,1.53
 Linux/UNIX,Compute Optimized,c5.18xlarge,72,281,144 GiB,EBS Only,3.06
 Linux/UNIX,Compute Optimized,c5a.8xlarge,36,72,72 GiB,EBS Only,1.232
+Linux/UNIX,Compute Optimized,c5.12xlarge,48,141,96 GiB,EBS Only,2.04
 Linux/UNIX,Compute Optimized,c5d.large,2,9,4 GiB,1 x 50 NVMe SSD,0.096
 Linux/UNIX,Compute Optimized,c5d.xlarge,4,17,8 GiB,1 x 100 NVMe SSD,0.192
 Linux/UNIX,Compute Optimized,c5d.2xlarge,8,34,16 GiB,1 x 200 NVMe SSD,0.384
