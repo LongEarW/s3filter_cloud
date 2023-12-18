@@ -28,7 +28,7 @@ class PandasCursor(object):
 
     """
 
-    def __init__(self, s3):
+    def __init__(self, s3, chunksize=10000):
 
         self.s3 = s3
 
@@ -52,6 +52,12 @@ class PandasCursor(object):
         self.table_data = None
 
         self.input = Format.CSV
+        self.chunksize = chunksize
+
+        self.config = TransferConfig(
+            multipart_chunksize=8 * MB,
+            multipart_threshold=8 * MB
+        )
 
     def parquet(self):
         self.input = Format.PARQUET
@@ -94,10 +100,10 @@ class PandasCursor(object):
         if not self.need_s3select:
 
             # if not os.path.exists(self.table_local_file_path) or not USE_CACHED_TABLES:
-            config = TransferConfig(
-                multipart_chunksize=8 * MB,
-                multipart_threshold=8 * MB
-            )
+            # config = TransferConfig(
+            #     multipart_chunksize=8 * MB,
+            #     multipart_threshold=8 * MB
+            # )
 
             self.table_data = io.BytesIO()
 
@@ -107,13 +113,13 @@ class PandasCursor(object):
                     Bucket=S3_BUCKET_NAME,
                     Key=self.s3key,
                     Fileobj=self.table_data,
-                    Config=config
+                    Config=self.config
                 )
 
             except Exception as e:
                 print("Error downloading key {} with message: {}".format(self.s3key, e.message))
 
-            self.num_http_get_requests = PandasCursor.calculate_num_http_requests(self.table_data, config)
+            # self.num_http_get_requests = PandasCursor.calculate_num_http_requests(self.table_data, config)
 
             return self.parse_file()
         else:
@@ -194,7 +200,7 @@ class PandasCursor(object):
 
                 if records_str_rdr.tell() > 1024 * 1024 * 16:
                     records_str_rdr.seek(0)
-                    df = pd.read_csv(records_str_rdr, header=None, prefix='_', dtype=numpy.str, engine='c',
+                    df = pd.read_csv(records_str_rdr, header=None, prefix='_', engine='c',
                                      quotechar='"', na_filter=False, compression=None, low_memory=False)
                     records_str_rdr.close()
                     # records_str_rdr = cStringIO.StringIO()
@@ -228,7 +234,7 @@ class PandasCursor(object):
 
                 if records_str_rdr.tell() > 0:
                     records_str_rdr.seek(0)
-                    df = pd.read_csv(records_str_rdr, header=None, prefix='_', dtype=numpy.str, engine='c',
+                    df = pd.read_csv(records_str_rdr, header=None, prefix='_', engine='c',
                                      quotechar='"', na_filter=False, compression=None, low_memory=False)
                     records_str_rdr.flush()
                     records_str_rdr.close()
@@ -252,24 +258,26 @@ class PandasCursor(object):
     def parse_file(self):
         try:
             if self.input is Format.CSV:
-                if self.table_data and len(self.table_data.getvalue()) > 0:
-                    # ip_stream = cStringIO.StringIO(self.table_data.getvalue().decode('utf-8'))
-                    ip_stream = io.StringIO(self.table_data.getvalue().decode('utf-8'))
-                elif os.path.exists(self.table_local_file_path):
-                    ip_stream = self.table_local_file_path
-                else:
-                    return
+                # if self.table_data and len(self.table_data.getvalue()) > 0:
+                #     # ip_stream = cStringIO.StringIO(self.table_data.getvalue().decode('utf-8'))
+                #     ip_stream = io.StringIO(self.table_data.getvalue().decode('utf-8'))
+                # elif os.path.exists(self.table_local_file_path):
+                #     ip_stream = self.table_local_file_path
+                # else:
+                #     return
 
                 self.time_to_first_record_response = self.time_to_last_record_response = self.timer.elapsed()
-
-                for df in pd.read_csv(ip_stream, delimiter='|',
+                self.table_data.seek(0)
+                for df in pd.read_csv(self.table_data, delimiter='|',
                                       header=None,
-                                      prefix='_', dtype=numpy.str,
+                                      prefix='_', dtype=str,
                                       engine='c', quotechar='"', na_filter=False, compression=None, low_memory=False,
                                       skiprows=1,
-                                      chunksize=10 ** 7):
+                                      chunksize=self.chunksize):
                     # Get read bytes
-                    self.bytes_returned += ip_stream.tell()
+                    # self.bytes_returned += ip_stream.tell()
+                    # self.bytes_returned += self.table_data.tell()
+                    self.bytes_returned = self.table_data.tell()
 
                     # # drop last column since the line separator | creates a new empty column at the end of every record
                     # df_col_names = list(df)
@@ -277,6 +285,7 @@ class PandasCursor(object):
                     # df.drop(last_col, axis=1, inplace=True)
 
                     yield df
+                self.num_http_get_requests = PandasCursor.calculate_num_http_requests(self.table_data, self.config)
             elif self.input is Format.PARQUET:
 
                 table = pq.read_table(self.table_data)
@@ -317,10 +326,17 @@ class PandasCursor(object):
                 with open(self.table_local_file_path, 'w') as table_file:
                     table_file.write(self.table_data.getvalue())
 
+    # @staticmethod
+    # def calculate_num_http_requests(table_data, config):
+    #     if table_data is not None and len(table_data.getvalue()):
+    #         shard_max_size = config.multipart_threshold
+    #         return math.ceil(len(table_data.getvalue()) / (1.0 * shard_max_size))
+
+    #     return 1
     @staticmethod
     def calculate_num_http_requests(table_data, config):
         if table_data is not None and len(table_data.getvalue()):
-            shard_max_size = config.multipart_threshold
+            shard_max_size = config.multipart_chunksize
             return math.ceil(len(table_data.getvalue()) / (1.0 * shard_max_size))
 
         return 1
